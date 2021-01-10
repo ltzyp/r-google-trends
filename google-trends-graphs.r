@@ -41,9 +41,12 @@ GT_LocationsClusterized <-  function(df,numClusters=6) {
 }
 
 plot.GT_LocationsClusterized <- function(mtrx ) {
-     ggplot(mtrx,aes(variable,value,group=location))+
-         geom_line(aes(colour=clusters,linetype=as.factor(rank))
-     )
+     ggplot(mtrx,aes(variable,value,Adjusted,group=location,colour=clusters)) +
+       geom_line(aes(colour=clusters,linetype=as.factor(rank)))  +
+        theme(legend.position='none') +
+        labs(title='UA',x='year',y='percent' )+
+        scale_color_discrete(guide='none')+             
+        geom_dl(aes(label=substr(location,1,3)),method=list(dl.combine('first.bumpup','last.bumpup'),cex=0.7) )     
 }
 
 plot.GT_LocationsHistory <- function( lh,numClusters =6 ) {
