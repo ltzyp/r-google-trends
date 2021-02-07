@@ -32,26 +32,30 @@ GT_LocationsClusterized <-  function(df,numClusters=5) {
 #  mtrx$clusters <- 1                                                  #todo -where this values must be calculated
 #  mtrx$clusters<-as.factor(kmeans(mtrx$means,numClusters)$cluster)
   mtrx <- na.omit(mtrx)
-  km <- kmeans(mtrx[c(2:ncol(mtrx))],numClusters,nstart=64)
+  ncols <- c(2:ncol(mtrx))
+  km <- kmeans(mtrx[ncols],numClusters,nstart=64)
   mtrx$clusters<-as.factor(km$cluster)
   mtrx$rank<-0 
   for ( lev in levels(mtrx$clusters)) {
     i =1;
-    for (loc in mtrx[mtrx$clusters==lev,]$location) { 
+    sbst <- mtrx[mtrx$clusters==lev,]
+    for (loc in sbst[order(sbst[,tail(ncols,1)]),]$location) { 
       mtrx[mtrx$location==loc,]$rank<-(i=i+1) 
     }
   }
   location <- paste('cluster',rownames(km$centers))
   rank <-1 
   clusters <- as.integer(rownames(km$centers))
-  mtrx <- rbind(mtrx,cbind(location,km$centers,clusters,rank))
+  c <-cbind(location,km$centers,clusters,rank)
+    mtrx <- rbind(mtrx,c)
   mtrx$rank<-as.factor(mtrx$rank)
   lc <- melt(mtrx,c("location","clusters","rank"))
+  lc$value <- as.numeric(lc$value)
   class(lc) <- c('GT_LocationsClusterized',class(lc))
   return(lc)
 }
 
-plot.GT_LocationsClusterized <- function(mtrx ) {
+plot.GT_LocationsClusterized <- function(mtrx,yl = c(0,1) ) {
   ggplot(mtrx,aes(variable,value,Adjusted,group=location,colour=clusters)) +
     scale_linetype_manual(values=c(1,c(2:6),c(2:6))) + 
     scale_size_manual(values=c(2,rep(.3,5),rep(.4,5))) + 
@@ -59,12 +63,15 @@ plot.GT_LocationsClusterized <- function(mtrx ) {
     geom_line(aes(colour=clusters,linetype=as.factor(rank),alpha=as.factor(rank),size=as.factor(rank) ))  +
     theme(legend.position='none') +
     labs(title='UA',x='year',y='percent' )+
+#    theme(axis.text.y=element_blank())+
+    scale_y_continuous()+
+    ylim(yl) +
     scale_color_discrete(guide='none')+             
-    geom_dl(aes(label=paste(clusters,rank)),method=list(dl.combine('first.bumpup','last.bumpup'),cex=0.7) )     
+#    geom_dl(aes(label=paste(clusters,rank)),method=list(dl.combine('first.bumpup','last.bumpup'),cex=0.7) )     
+    geom_dl(aes(label=abbreviate(location,3)),method=list(dl.combine('first.bumpup','last.bumpup'),cex=0.7) )     
 }
 
 plot.GT_LocationsHistory <- function( lh,numClusters =6 ) {
   lc <- GT_LocationsClusterized( lh, numClusters )   
   plot(lc)
 }
-
