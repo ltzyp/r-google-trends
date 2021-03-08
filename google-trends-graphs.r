@@ -1,8 +1,5 @@
-source('time-intervals.r')
-require('gtrendsR')
-require('reshape2')
-require('ggplot2')
-require('directlabels')
+source('setup.r')
+
 diff_transformer <-  function(a,b) { (a-b)/(a+b)  }
 default_transformer <-  function(a,b) { b/(a+b)  }
 
