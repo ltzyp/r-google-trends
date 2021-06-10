@@ -1,0 +1,3 @@
+- { words: ["wer+welcher+wann","who+which+when"], region: 'DE', time: '2017.<~5*1' }
+- { words: ["Nachrichten+heute+gestern","news+today+yesterday"] }
+- { words: ["Price+Rabatt+Umsatz","price+discount+sales"] }

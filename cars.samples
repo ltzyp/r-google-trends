@@ -1,0 +1,2 @@
+- { words: ["tesla","toyota"], region: 'US', time: '2012.<~10*1', clusters: 12  }
+- { region: 'DE', clusters: 6 }

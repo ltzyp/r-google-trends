@@ -1,7 +1,7 @@
 source('setup.r')
 
 diff_transformer <-  function(a,b) { (a-b)/(a+b)  }
-default_transformer <-  function(a,b) { b/(a+b)  }
+default_transformer <-  function(a,b) { a/(a+b)  }
 
 
 GT_LocationsHistory <- function(words,geo,timeseq,func=default_transformer) {
@@ -14,7 +14,8 @@ GT_LocationsHistory <- function(words,geo,timeseq,func=default_transformer) {
     gt <-  gtrends(keyword=words,geo=geo,time=di)$interest_by_region
     gt$keyword <- gsub('\\+','_', gsub('\\s+','', gt$keyword))
     fr <-  dcast(gt,'location~keyword',value.var='hits')
-    fr$value <-  func_( fr[[2]], fr[[3]])
+    params <- list(fr[[2]], fr[[3]])[match(1:2,order( words) )]
+    fr$value <-  do.call(func_,params )
     fr$timeslot <- format(tf[i,1],degree.get_format(tf))
     df<-rbind(df, fr[,c('timeslot','location','value')])
   };  
@@ -30,34 +31,48 @@ kmeans_ordered <- function( mtrx, numClusters, valueFunc=mean , nstart =64 ) {
     kmeans( mtrx, centers=ordered ,nstart=nstart)      
 }
 
-GT_LocationsClusterized <-  function(df,numClusters=5) {
-  mtrx<-dcast(df,location~timeslot,value.var='value')                
-  mtrx <- na.omit(mtrx)
-  ncols <- c(2:ncol(mtrx))
-  km <- kmeans_ordered(mtrx[ncols],numClusters,nstart=64)
-  mtrx$clusters<-as.factor(km$cluster)
-  mtrx$rank<-0 
+assign_ranks_in_clusters <- function(mtrx,ncols) {
+  mtrx$rank <- 0 
   for ( lev in levels(mtrx$clusters)) {
-    i =1;
+    i =1; 
     sbst <- mtrx[mtrx$clusters==lev,]
     for (loc in sbst[order(sbst[,tail(ncols,1)]),]$location) { 
       mtrx[mtrx$location==loc,]$rank<-(i=i+1) 
     }
   }
-  location <- paste('cluster',rownames(km$centers))
+    return(mtrx)
+}
+
+attach_subtotals <- function( mtrx,subtotals, subname='cluster') {
+  location <- paste('cluster',rownames(subtotals))
   rank <-1 
-  clusters <- as.integer(rownames(km$centers))
-  c <-cbind(location,km$centers,clusters,rank)
-  mtrx <- rbind(mtrx,c)
+  clusters <- as.integer(rownames(subtotals))
+  c <-cbind(location,subtotals,clusters,rank)
+  return( rbind(mtrx,c))
+} 
+
+GT_Clusters <-  function(df,numClusters=5) {
+  mtrx<-dcast(df,location~timeslot,value.var='value')                
+  mtrx <- na.omit(mtrx)
+  ncols <- c(2:ncol(mtrx))
+  km <- kmeans_ordered(mtrx[ncols],numClusters,nstart=64)
+  mtrx$clusters<-as.factor(km$cluster)
+
+  mtrx <- assign_ranks_in_clusters(mtrx,ncols)
+  mtrx <- attach_subtotals(mtrx,km$centers)
+ 
+#  mtrx$clusters<-as.factor(km$cluster)
   mtrx$rank<-as.factor(mtrx$rank)
   lc <- melt(mtrx,c("location","clusters","rank"))
   lc$value <- as.numeric(lc$value)
-  class(lc) <- c('GT_LocationsClusterized',class(lc))
+
+  class(lc) <- c('GT_Clusters',class(lc))
   return(lc)
 }
 
 GT_Frames <- function() {
     f <- list()
+    f$header <- character(0)
     class(f) <- c('GT_Frames',class(f))
     return(f)
 }
@@ -74,29 +89,31 @@ GT_Frames.load <- function( filename ) {
     yf <- yaml.load(read_file(filename))
     fr <- GT_Frames( )
     ls <- list()
-    ls$clusters <- formals(GT_LocationsClusterized)$numClusters
+    ls$clusters <- formals(GT_Clusters)$numClusters
     for (i in seq_along(yf)) {
         ls <- mixing(yf[[i]],ls )
         lh <- GT_LocationsHistory(ls$words, ls$region ,ls$time)
-        lc <- GT_LocationsClusterized( lh , ls$clusters )
-        fr <- append.GT_Frames( fr, lc )
+        lc <- GT_Clusters( lh , ls$clusters )
+        fr <- append.GT_Frames( fr, lc, paste(ls$words,collapse=' : ') )
     }    
     return( fr )
 }
 
 
-append.GT_Frames <- function( f, lc) {
+append.GT_Frames <- function( f, lc, header) {
     lf <- length(f) + 1
+    if(is.null(header)) header <- lf
     f[[lf]] <- lc
-    f[[lf]]$frame <- lf 
+    f[[lf]]$frame <- as.factor(lf) 
+    f$header[lf] <- header
     f
 }
 
 melt.GT_Frames <- function( f ) {
-    do.call("rbind",f)
+    do.call("rbind",f[2:length(f)])
 }
 
-plot.GT_LocationsClusterized <- function(mtrx,yl = c(0,1) ) {
+plot.GT_Clusters <- function(mtrx,yl = c(0,1) ) {
   ggplot(mtrx,aes(variable,value,Adjusted,group=location,colour=clusters)) +
     scale_linetype_manual(values=c(1,c(2:6),c(2:6))) + 
     scale_size_manual(values=c(2,rep(.3,5),rep(.4,5))) + 
@@ -107,15 +124,18 @@ plot.GT_LocationsClusterized <- function(mtrx,yl = c(0,1) ) {
     scale_y_continuous()+
     ylim(yl) +
     scale_color_discrete(guide='none')+             
-    geom_dl(aes(label=abbreviate(location,3)),method=list(dl.combine('first.bumpup','last.bumpup'),cex=0.7) )     
+    geom_dl(aes(label=abbreviate(location,5)),method=list(dl.combine('first.bumpup','last.bumpup'),cex=0.6) )     
 }
 
 plot.GT_LocationsHistory <- function( lh,numClusters =6 ) {
-  lc <- GT_LocationsClusterized( lh, numClusters )   
+  lc <- GT_Clusters( lh, numClusters )   
   plot(lc)
 }
 
 plot.GT_Frames <- function( f ) {
+    frameLabeller <- function(variable,value ) {
+        return( f$header[as.numeric(value)+1] )
+    }
     m <- melt(f)
-    plot.GT_LocationsClusterized(m) + facet_grid(.~frame)
+    plot.GT_Clusters(m) + facet_grid(.~frame,labeller=frameLabeller)
 }
